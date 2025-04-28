@@ -1,32 +1,10 @@
 #include <main.hpp>
 
-SDL_GPUShaderFormat GPUNewtonApp::getAvailableShaderFormats()
-{
-	SDL_GPUShaderFormat ret = 0;
-	constexpr SDL_GPUShaderFormat formats[] = {
-		SDL_GPU_SHADERFORMAT_PRIVATE,
-		SDL_GPU_SHADERFORMAT_SPIRV,
-		SDL_GPU_SHADERFORMAT_DXBC,
-		SDL_GPU_SHADERFORMAT_DXIL,
-		SDL_GPU_SHADERFORMAT_MSL,
-		SDL_GPU_SHADERFORMAT_METALLIB
-	};
-
-	for (const auto &fmt : formats) {
-		if (SDL_GPUSupportsShaderFormats(fmt, nullptr))
-			ret |= fmt;
-	}
-	
-	return ret;
-}
-
 void GPUNewtonApp::loadDevice()
 {
-	const auto desiredShaderFormats = SHADER_FORMAT;
-
-	auto shaderFormats = getAvailableShaderFormats();
-	if (!(shaderFormats & desiredShaderFormats))
-		throw SDLError("desired shader formats are unavailable");
+	const auto desiredShaderFormats =
+		SDL_GPU_SHADERFORMAT_SPIRV |
+		SDL_GPU_SHADERFORMAT_MSL;
 
 #ifdef NDEBUG
 	const bool debugMode = false;
@@ -48,29 +26,39 @@ void GPUNewtonApp::loadDevice()
 
 SDL_GPUShader *GPUNewtonApp::loadShader(
 	std::string_view fname,
-	SDL_GPUShaderFormat fmt,
 	std::uint32_t numSamplers,
 	std::uint32_t numStorageTextures,
 	std::uint32_t numStorageBuffers,
 	std::uint32_t numUniformBuffers)
 {
+	std::string fileName(fname);
 	SDL_GPUShaderStage stage;
-	if (SDL_strstr(fname.data(), ".vert"))
+	if (SDL_strstr(fileName.data(), ".vert"))
 		stage = SDL_GPU_SHADERSTAGE_VERTEX;
-	else if (SDL_strstr(fname.data(), ".frag"))
+	else if (SDL_strstr(fileName.data(), ".frag"))
 		stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
 	else
-		throw std::runtime_error("invalid shader file extension (vert/frag");
+		throw std::runtime_error("invalid shader file extension (vert/frag)");
+
+	SDL_GPUShaderFormat fmt = SDL_GetGPUShaderFormats(gpuDevice);
+	const char *entryPoint = "main";
+	if (fmt & SDL_GPU_SHADERFORMAT_MSL) {
+		fileName.append(".msl");
+		entryPoint = "main0";
+	} else if (fmt & SDL_GPU_SHADERFORMAT_SPIRV) {
+		fileName.append(".spv");
+	} else
+		throw std::runtime_error("shader formats not supported on this machine");
 
 	std::size_t codeSize;
-	void *data = SDL_LoadFile(fname.data(), &codeSize);
+	void *data = SDL_LoadFile(fileName.data(), &codeSize);
 	if (!data)
 		throw SDLError("failed to read shader file");
 
 	SDL_GPUShaderCreateInfo createInfo{};
 	createInfo.code_size = codeSize;
 	createInfo.code = static_cast<const std::uint8_t *>(data);
-	createInfo.entrypoint = "main0"; /* This is only for MSL! */
+	createInfo.entrypoint = entryPoint;
 	createInfo.format = fmt;
 	createInfo.stage = stage;
 	createInfo.num_samplers = numSamplers;
@@ -89,12 +77,8 @@ SDL_GPUShader *GPUNewtonApp::loadShader(
 
 void GPUNewtonApp::loadPipeline()
 {
-	SDL_GPUShader *vertShader = loadShader(
-		VERT_SHADER_FNAME, SHADER_FORMAT, 0, 0, 0, 0
-	);
-	SDL_GPUShader *fragShader = loadShader(
-		FRAG_SHADER_FNAME, SHADER_FORMAT, 0, 0, 0, 0
-	);
+	SDL_GPUShader *vertShader = loadShader(VERT_SHADER_FNAME, 0, 0, 0, 0);
+	SDL_GPUShader *fragShader = loadShader(FRAG_SHADER_FNAME, 0, 0, 0, 0);
 
 	SDL_GPUColorTargetDescription colorDesc{};
 	colorDesc.format = SDL_GetGPUSwapchainTextureFormat(gpuDevice, window),
@@ -115,9 +99,9 @@ void GPUNewtonApp::loadPipeline()
 	createInfo.rasterizer_state = SDL_GPURasterizerState {
 		.fill_mode = SDL_GPU_FILLMODE_FILL
 	};
-	createInfo.target_info = {
-		.num_color_targets = 1,
-		.color_target_descriptions = &colorDesc
+	createInfo.target_info = SDL_GPUGraphicsPipelineTargetInfo {
+		.color_target_descriptions = &colorDesc,
+		.num_color_targets = 1
 	};
 	gpuPipeline = SDL_CreateGPUGraphicsPipeline(gpuDevice, &createInfo);
 	SDL_ReleaseGPUShader(gpuDevice, vertShader);
@@ -262,7 +246,7 @@ void GPUNewtonApp::loop()
 
 			SDL_BindGPUGraphicsPipeline(renderPass, gpuPipeline);
 
-			SDL_PushGPUVertexUniformData(cmdBuffer, 0, glm::value_ptr(combined), sizeof(glm::mat4));
+			//SDL_PushGPUVertexUniformData(cmdBuffer, 0, glm::value_ptr(combined), sizeof(glm::mat4));
 			SDL_DrawGPUPrimitives(renderPass, 3, 1, 0, 0);
 			SDL_EndGPURenderPass(renderPass);
 		} else {

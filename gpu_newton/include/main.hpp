@@ -15,6 +15,7 @@
 #include <fstream>
 #include <sstream>
 #include <cstdarg>
+#include <array>
 
 /*
  * In degrees
@@ -26,10 +27,8 @@
 
 #define MOUSE_SENSITIVITY (2.0)
 
-#define VERT_SHADER_FNAME "shaders/bin/dot_vs.vert.msl"
-#define FRAG_SHADER_FNAME "shaders/bin/dot_fs.frag.msl"
-
-#define SHADER_FORMAT (SDL_GPU_SHADERFORMAT_MSL)
+#define VERT_SHADER_FNAME "shaders/bin/dot_vs.vert"
+#define FRAG_SHADER_FNAME "shaders/bin/dot_fs.frag"
 
 void log([[maybe_unused]] SDL_LogPriority pri, [[maybe_unused]] const char *fmt, ...)
 {
@@ -72,12 +71,9 @@ class GPUNewtonApp {
 
 		bool running;
 
-		SDL_GPUShaderFormat getAvailableShaderFormats();
-
 		void loadDevice();
 		SDL_GPUShader *loadShader(
 			std::string_view fname,
-			SDL_GPUShaderFormat fmt,
 			std::uint32_t numSamplers,
 			std::uint32_t numStorageTextures,
 			std::uint32_t numStorageBuffers,

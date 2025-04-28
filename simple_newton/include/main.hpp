@@ -16,7 +16,7 @@
 /*
  * The number of particles in the simulation.
  */
-#define NUM_PARTICLES (2000)
+#define NUM_PARTICLES (4000)
 
 /*
  * The lowest possible particle mass.
@@ -46,15 +46,15 @@
 #define TIMESTEP (1)
 
 struct SDLError {
-	std::string_view msg;
+	mutable std::string msg;
 	template <class T>
 	constexpr SDLError(T msg):
 		msg(msg) {}
 
 	virtual const char *what() const noexcept {
-		std::stringstream s;
-		s << msg << " | " << SDL_GetError();
-		return s.view().data();
+		msg.append(" | ");
+		msg.append(SDL_GetError());
+		return msg.data();
 	}
 };
 
