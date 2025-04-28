@@ -1,0 +1,43 @@
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+struct camInfo
+{
+    float4x4 combined;
+};
+
+struct main0_out
+{
+    float2 vertOut [[user(locn0)]];
+    float4 gl_Position [[position]];
+};
+
+vertex main0_out main0(constant camInfo& _41 [[buffer(0)]], uint gl_VertexIndex [[vertex_id]])
+{
+    main0_out out = {};
+    float2 vert;
+    switch (int(gl_VertexIndex))
+    {
+        case 0:
+        {
+            vert = float2(0.0, 2.0);
+            break;
+        }
+        case 1:
+        {
+            vert = float2(1.732100009918212890625, -1.0);
+            break;
+        }
+        case 2:
+        {
+            vert = float2(-1.732100009918212890625, -1.0);
+            break;
+        }
+    }
+    out.gl_Position = _41.combined * float4(vert, 0.0, 1.0);
+    out.vertOut = vert;
+    return out;
+}
+
