@@ -6,6 +6,7 @@
 #include <glm/vec4.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/trigonometric.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -16,6 +17,9 @@
 #include <sstream>
 #include <cstdarg>
 #include <array>
+#include <chrono>
+
+#define PRINT_FPS (false)
 
 /*
  * In degrees
@@ -40,6 +44,12 @@ void log([[maybe_unused]] SDL_LogPriority pri, [[maybe_unused]] const char *fmt,
 #endif
 }
 
+std::ostream &operator<<(std::ostream &os, const glm::vec3 &vec)
+{
+	os << "VEC3(" << vec.x << ", " << vec.y << ", " << vec.z << ")";
+	return os;
+}
+
 struct SDLError final : std::exception {
 	mutable std::string msg;
 	template <class T>
@@ -53,10 +63,6 @@ struct SDLError final : std::exception {
 	}
 };
 
-struct ParticleVertexData {
-	unsigned int index;
-};
-
 class GPUNewtonApp {
 	private:
 		SDL_Window *window                   = nullptr;
@@ -65,11 +71,17 @@ class GPUNewtonApp {
 		SDL_GPUCommandBuffer *cmdBuffer      = nullptr;
 
 		using Keyboard = std::array<bool, SDL_SCANCODE_COUNT>;
+		Keyboard keyboard;
+		glm::vec2 mouse = glm::vec2(0.0);
+
 		glm::mat4 projMatrix = glm::mat4(1.0);
-		glm::vec3 camPosition = glm::vec3(0.0);
+		glm::vec3 camPosition = glm::vec3(0.0, 0.0, -2);
 		glm::vec3 camLookat = glm::vec3(0.0);
 
-		bool running;
+		using TimePoint = std::chrono::steady_clock::time_point;
+		using Duration = std::chrono::duration<double, std::milli>;
+		Duration delta;
+		bool running = false;
 
 		void loadDevice();
 		SDL_GPUShader *loadShader(
@@ -81,13 +93,16 @@ class GPUNewtonApp {
 		);
 		void loadPipeline();
 
+		TimePoint currentTime();
+		void debugDelta();
+		void handleEvents();
+
 		bool keyPressed(const Keyboard &keyboard, SDL_Keycode key);
 		void updateProjMatrix(int width, int height);
 		void updateCamera(const glm::vec2 &mouse, const Keyboard &keyboard);
 
 		void createCombined(glm::mat4 &combined);
 
-		void handleEvents();
 
 	public:
 		GPUNewtonApp(std::string_view title, int width, int height);

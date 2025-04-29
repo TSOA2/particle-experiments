@@ -11,12 +11,13 @@ struct main0_out
 struct main0_in
 {
     float2 vertIn [[user(locn0)]];
+    float vertScale [[user(locn1)]];
 };
 
 fragment main0_out main0(main0_in in [[stage_in]])
 {
     main0_out out = {};
-    if (dot(in.vertIn, in.vertIn) <= 1.0)
+    if (length(in.vertIn) <= (1.0 / in.vertScale))
     {
         out.color = float4(1.0, 0.0, 1.0, 0.0);
     }

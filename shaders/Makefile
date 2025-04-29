@@ -12,6 +12,8 @@ SPV_FRAGOUTS := $(patsubst %.frag,bin/%.frag.spv,$(FRAGS))
 MSL_VERTOUTS := $(patsubst %.vert,bin/%.vert.msl,$(VERTS))
 MSL_FRAGOUTS := $(patsubst %.frag,bin/%.frag.msl,$(FRAGS))
 
+all: spv msl
+
 spv: $(SPV_VERTOUTS) $(SPV_FRAGOUTS)
 
 msl: $(MSL_VERTOUTS) $(MSL_FRAGOUTS)

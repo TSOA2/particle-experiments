@@ -11,6 +11,7 @@ struct camInfo
 struct main0_out
 {
     float2 vertOut [[user(locn0)]];
+    float vertScale [[user(locn1)]];
     float4 gl_Position [[position]];
 };
 
@@ -22,22 +23,23 @@ vertex main0_out main0(constant camInfo& _41 [[buffer(0)]], uint gl_VertexIndex 
     {
         case 0:
         {
-            vert = float2(0.0, 2.0);
+            vert = float2(0.0, 0.039999999105930328369140625);
             break;
         }
         case 1:
         {
-            vert = float2(1.732100009918212890625, -1.0);
+            vert = float2(0.0346419997513294219970703125, -0.0199999995529651641845703125);
             break;
         }
         case 2:
         {
-            vert = float2(-1.732100009918212890625, -1.0);
+            vert = float2(-0.0346419997513294219970703125, -0.0199999995529651641845703125);
             break;
         }
     }
     out.gl_Position = _41.combined * float4(vert, 0.0, 1.0);
     out.vertOut = vert;
+    out.vertScale = 50.0;
     return out;
 }
 

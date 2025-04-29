@@ -3,6 +3,7 @@
 
 #include <SDL3/SDL.h>
 #include <glm/vec2.hpp>
+#include <glm/vec3.hpp>
 #include <glm/geometric.hpp>
 #include <BS_thread_pool.hpp>
 
@@ -16,12 +17,12 @@
 /*
  * The number of particles in the simulation.
  */
-#define NUM_PARTICLES (4000)
+#define NUM_PARTICLES (3e4)
 
 /*
  * The lowest possible particle mass.
  */
-#define MASS_LOW (1e2)
+#define MASS_LOW (1e8)
 
 /*
  * The highest possible particle mass.
@@ -31,7 +32,7 @@
 /*
  * Determines whether the particles collide with the walls.
  */
-#define WALL_COLLISION (true)
+#define WALL_COLLISION (false)
 
 /*
  * How much of their original velocity to the particles have after
@@ -43,7 +44,7 @@
  * Increase this to increase the timestep of the simulation (this
  * will decrease the precision)
  */
-#define TIMESTEP (1)
+#define TIMESTEP (6)
 
 struct SDLError {
 	mutable std::string msg;
@@ -61,6 +62,7 @@ struct SDLError {
 class ParticleSet {
 	private:
 		struct ParticleInfo {
+			glm::dvec2 pos;
 			glm::dvec2 veloc;
 			double mass;
 		};
@@ -70,8 +72,16 @@ class ParticleSet {
 		std::vector<ParticleInfo> infos;
 
 	public:
+		struct UpdateInfo {
+			glm::dvec2 camPos;
+			double camScale;
+			double delta;
+			int width;
+			int height;
+		};
+
 		ParticleSet(std::size_t nParticles, int width, int height);
-		void updateParticles(double delta, int width, int height);
+		void updateParticles(const UpdateInfo &updateInfo);
 		void draw(SDL_Renderer *render);
 };
 
@@ -84,6 +94,11 @@ class SimpleNewtonApp {
 		SDL_Renderer *render;
 		bool running;
 
+		glm::dvec2 camPos = glm::dvec2(0.0);
+		double camScale = 1.0;
+
+		void calcScale(const SDL_Event &event);
+		void calcMove(const SDL_Event &event);
 		void handleEvents();
 
 	public:

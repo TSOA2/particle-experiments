@@ -45,8 +45,10 @@ SDL_GPUShader *GPUNewtonApp::loadShader(
 	if (fmt & SDL_GPU_SHADERFORMAT_MSL) {
 		fileName.append(".msl");
 		entryPoint = "main0";
+		fmt = SDL_GPU_SHADERFORMAT_MSL;
 	} else if (fmt & SDL_GPU_SHADERFORMAT_SPIRV) {
 		fileName.append(".spv");
+		fmt = SDL_GPU_SHADERFORMAT_SPIRV;
 	} else
 		throw std::runtime_error("shader formats not supported on this machine");
 
@@ -77,7 +79,7 @@ SDL_GPUShader *GPUNewtonApp::loadShader(
 
 void GPUNewtonApp::loadPipeline()
 {
-	SDL_GPUShader *vertShader = loadShader(VERT_SHADER_FNAME, 0, 0, 0, 0);
+	SDL_GPUShader *vertShader = loadShader(VERT_SHADER_FNAME, 0, 0, 0, 1);
 	SDL_GPUShader *fragShader = loadShader(FRAG_SHADER_FNAME, 0, 0, 0, 0);
 
 	SDL_GPUColorTargetDescription colorDesc{};
@@ -130,37 +132,41 @@ void GPUNewtonApp::updateCamera(const glm::vec2 &mouse, const Keyboard &keyboard
 		static float yaw;
 		static float pitch;
 
-		yaw += mouse.x * MOUSE_SENSITIVITY;
-		pitch -= mouse.x * MOUSE_SENSITIVITY;
+		yaw += glm::radians(mouse.x * MOUSE_SENSITIVITY);
+		pitch -= glm::radians(mouse.y * MOUSE_SENSITIVITY);
 
-		if (pitch > 89)
-			pitch = 89;
-		else if (pitch < -89)
-			pitch = -89;
+		const float rightAngle = glm::pi<float>() / 2;
+		const float topLimit = rightAngle - 0.1;
+		if (pitch > topLimit)
+			pitch = topLimit;
+		else if (pitch < -topLimit)
+			pitch = -topLimit;
 
-		camLookat = glm::vec3(
-			glm::cos(glm::radians(yaw)) * glm::cos(glm::radians(pitch)),
-			glm::sin(glm::radians(pitch)),
-			glm::sin(glm::radians(yaw)) * glm::cos(glm::radians(pitch))
-		);
+		/*
+		 * This may be ugly, but it works?
+		 */
+		const float x = - glm::tan(yaw) * glm::cos(pitch);
+		const float y = glm::sin(pitch);
+		const float z = glm::tan(rightAngle - yaw) * x;
+
+		camLookat = glm::vec3(x, y, z);
 	}
 
 	/* Where the camera is */
 	{
 		if (keyPressed(keyboard, SDLK_W))
-			camPosition += camLookat;
+			camPosition.z += 0.1;
 
 		if (keyPressed(keyboard, SDLK_S))
-			camPosition -= camLookat;
+			camPosition.z -= 0.1;
 	}
 }
 
+
 void GPUNewtonApp::createCombined(glm::mat4 &combined)
 {
-	//const glm::mat4 viewMatrix = glm::lookAt(camPosition, camLookat, glm::vec3(0.0, 1.0, 0.0));
-	const glm::mat4 viewMatrix = glm::lookAt(glm::vec3(0.0,0.0,-1.0), glm::vec3(0.0,0.0,1.0), glm::vec3(0.0, 1.0, 0.0));
-	const glm::mat4 modelMatrix = glm::mat4(1.0);
-	combined = projMatrix * viewMatrix * modelMatrix;
+	glm::mat4 viewMatrix = glm::lookAt(camPosition, camLookat, glm::vec3(0.0, 1.0, 0.0));
+	combined = projMatrix * viewMatrix;
 }
 
 GPUNewtonApp::GPUNewtonApp(std::string_view title, int width, int height)
@@ -180,14 +186,34 @@ GPUNewtonApp::GPUNewtonApp(std::string_view title, int width, int height)
 	loadPipeline();
 
 	SDL_ShowWindow(window);
+
 	updateProjMatrix(width, height);
+	keyboard.fill(false);
+}
+
+GPUNewtonApp::TimePoint GPUNewtonApp::currentTime()
+{
+	return std::chrono::steady_clock::now();
+}
+
+void GPUNewtonApp::debugDelta()
+{
+#if !defined(NDEBUG) && PRINT_FPS
+	static TimePoint last;
+
+	const auto fps = std::chrono::seconds(1) / delta;
+	if ((currentTime() - last) >= std::chrono::seconds(1)) {
+		std::cout << "Delta time: " << delta << ", FPS: " << fps << std::endl;
+		last = currentTime();
+	}
+#endif
 }
 
 void GPUNewtonApp::handleEvents()
 {
 	SDL_Event event;
-	Keyboard keyboard;
-	glm::vec2 mouse;
+
+	mouse = glm::vec2(0, 0);
 	while (SDL_PollEvent(&event)) {
 		switch (event.type) {
 			case SDL_EVENT_QUIT:
@@ -208,16 +234,28 @@ void GPUNewtonApp::handleEvents()
 				break;
 		}
 	}
-
-	updateCamera(mouse, keyboard);
 }
 
 void GPUNewtonApp::loop()
 {
 	running = true;
 
+	TimePoint lastTime = currentTime();
 	while (running) {
 		handleEvents();
+
+		TimePoint thisTime = currentTime();
+		delta = thisTime - lastTime;
+		debugDelta();
+
+		/* Simulation code here */
+		{
+			updateCamera(mouse, keyboard);
+		}
+		/* End of simulation code */
+
+		lastTime = thisTime;
+
 		cmdBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
 		if (!cmdBuffer) {
 			log(SDL_LOG_PRIORITY_ERROR, "failed to acquire command buffer: %s", SDL_GetError());
@@ -246,7 +284,7 @@ void GPUNewtonApp::loop()
 
 			SDL_BindGPUGraphicsPipeline(renderPass, gpuPipeline);
 
-			//SDL_PushGPUVertexUniformData(cmdBuffer, 0, glm::value_ptr(combined), sizeof(glm::mat4));
+			SDL_PushGPUVertexUniformData(cmdBuffer, 0, glm::value_ptr(combined), sizeof(glm::mat4));
 			SDL_DrawGPUPrimitives(renderPass, 3, 1, 0, 0);
 			SDL_EndGPURenderPass(renderPass);
 		} else {
