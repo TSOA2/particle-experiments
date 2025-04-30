@@ -19,7 +19,7 @@
 #include <array>
 #include <chrono>
 
-#define PRINT_FPS (false)
+#define PRINT_FPS (true)
 
 /*
  * In degrees
@@ -97,7 +97,8 @@ class GPUNewtonApp {
 		void debugDelta();
 		void handleEvents();
 
-		bool keyPressed(const Keyboard &keyboard, SDL_Keycode key);
+		void toggleMouseGrab();
+		bool keyPressed(SDL_Keycode key, bool wait);
 		void updateProjMatrix(int width, int height);
 		void updateCamera(const glm::vec2 &mouse, const Keyboard &keyboard);
 

@@ -120,7 +120,7 @@ void GPUNewtonApp::updateProjMatrix(int width, int height)
 	projMatrix = glm::perspective(glm::radians(FOV), aspect, NEAR, FAR);
 }
 
-bool GPUNewtonApp::keyPressed(const Keyboard &keyboard, SDL_Keycode key)
+bool GPUNewtonApp::keyPressed(SDL_Keycode key, [[maybe_unused]] bool wait)
 {
 	return keyboard[SDL_GetScancodeFromKey(key, nullptr)];
 }
@@ -142,30 +142,27 @@ void GPUNewtonApp::updateCamera(const glm::vec2 &mouse, const Keyboard &keyboard
 		else if (pitch < -topLimit)
 			pitch = -topLimit;
 
-		/*
-		 * This may be ugly, but it works?
-		 */
-		const float x = - glm::tan(yaw) * glm::cos(pitch);
+		const float x = glm::cos(yaw) * glm::cos(pitch);
 		const float y = glm::sin(pitch);
-		const float z = glm::tan(rightAngle - yaw) * x;
+		const float z = glm::sin(yaw) * glm::cos(pitch);
 
 		camLookat = glm::vec3(x, y, z);
 	}
 
 	/* Where the camera is */
 	{
-		if (keyPressed(keyboard, SDLK_W))
-			camPosition.z += 0.1;
+		if (keyPressed(SDLK_W, false))
+			camPosition += camLookat * static_cast<float>(delta / std::chrono::seconds(1));
 
-		if (keyPressed(keyboard, SDLK_S))
-			camPosition.z -= 0.1;
+		if (keyPressed(SDLK_S, false))
+			camPosition -= camLookat * static_cast<float>(delta / std::chrono::seconds(1));
 	}
 }
 
 
 void GPUNewtonApp::createCombined(glm::mat4 &combined)
 {
-	glm::mat4 viewMatrix = glm::lookAt(camPosition, camLookat, glm::vec3(0.0, 1.0, 0.0));
+	glm::mat4 viewMatrix = glm::lookAt(camPosition, camPosition + camLookat, glm::vec3(0.0, 1.0, 0.0));
 	combined = projMatrix * viewMatrix;
 }
 
@@ -209,6 +206,13 @@ void GPUNewtonApp::debugDelta()
 #endif
 }
 
+void GPUNewtonApp::toggleMouseGrab()
+{
+	static bool enabled;
+	enabled = !enabled;
+	SDL_SetWindowRelativeMouseMode(window, enabled);
+}
+
 void GPUNewtonApp::handleEvents()
 {
 	SDL_Event event;
@@ -234,6 +238,9 @@ void GPUNewtonApp::handleEvents()
 				break;
 		}
 	}
+
+	if (keyPressed(SDLK_ESCAPE, true))
+		toggleMouseGrab();
 }
 
 void GPUNewtonApp::loop()
