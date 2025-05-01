@@ -19,7 +19,7 @@ fragment main0_out main0(main0_in in [[stage_in]])
     main0_out out = {};
     if (length(in.vertIn) <= (1.0 / in.vertScale))
     {
-        out.color = float4(1.0, 0.0, 1.0, 0.0);
+        out.color = float4(0.20000000298023223876953125, 0.800000011920928955078125, 0.20000000298023223876953125, 0.5);
     }
     else
     {

@@ -1,5 +1,90 @@
 #include <main.hpp>
 
+ParticleSet::ParticleSet(SDL_GPUDevice *gpuDevice, std::size_t numParticles):
+	gpuDevice(gpuDevice)
+{
+	std::random_device device;
+	std::mt19937 rng(device());
+
+	std::uniform_real_distribution<float> xdisr(0.0f, PARTICLE_BOX_X);
+	std::uniform_real_distribution<float> ydisr(0.0f, PARTICLE_BOX_Y);
+	std::uniform_real_distribution<float> zdisr(0.0f, PARTICLE_BOX_Z);
+	std::uniform_real_distribution<float> mdisr(MASS_LOW, MASS_HIGH);
+
+	particles.reserve(numParticles);
+	for (std::size_t i = 0; i < numParticles; i++) {
+		Particle particle = {
+			.position = glm::vec3(xdisr(rng), ydisr(rng), zdisr(rng)),
+			.mass = mdisr(rng),
+			.p0 = 0,
+			.velocity = glm::vec3(0.0f)
+		};
+
+		particles.push_back(particle);
+	}
+
+	const std::size_t bsize = numParticles * sizeof(ParticleSet::Particle);
+	SDL_GPUBufferCreateInfo bufferCreateInfo{};
+	bufferCreateInfo.usage =
+		SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ |
+		SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ  |
+		SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE;
+	bufferCreateInfo.size = bsize;
+
+	particleBuffer = SDL_CreateGPUBuffer(gpuDevice, &bufferCreateInfo);
+	if (!particleBuffer)
+		throw SDLError("failed to create particle buffer");
+
+	SDL_GPUTransferBufferCreateInfo transferCreateInfo{};
+	transferCreateInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+	transferCreateInfo.size = bsize;
+
+	transferBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferCreateInfo);
+	if (!transferBuffer)
+		throw SDLError("failed to create particle transfer buffer");
+}
+
+void ParticleSet::upload(SDL_GPUCommandBuffer *cmdBuf)
+{
+	auto particlesGPU = static_cast<ParticleSet::Particle *>(SDL_MapGPUTransferBuffer(gpuDevice, transferBuffer, true));
+	if (!particlesGPU) {
+		log(SDL_LOG_PRIORITY_CRITICAL, "failed to map particle transfer buffer: %s", SDL_GetError());
+		return ;
+	}
+
+	std::size_t size = particles.size();
+	std::copy(particles.begin(), particles.end(), particlesGPU);
+	SDL_UnmapGPUTransferBuffer(gpuDevice, transferBuffer);
+
+	SDL_GPUCopyPass *copyPass = SDL_BeginGPUCopyPass(cmdBuf);
+
+	SDL_GPUTransferBufferLocation location{};
+	location.transfer_buffer = transferBuffer;
+
+	SDL_GPUBufferRegion region{};
+	region.buffer = particleBuffer;
+	region.size = size * sizeof(ParticleSet::Particle);
+
+	SDL_UploadToGPUBuffer(copyPass, &location, &region, true);
+	SDL_EndGPUCopyPass(copyPass);
+}
+
+SDL_GPUBuffer *ParticleSet::getBuffer() const
+{
+	return particleBuffer;
+}
+
+std::size_t ParticleSet::getNum() const
+{
+	return particles.size();
+}
+
+ParticleSet::~ParticleSet()
+{
+	SDL_ReleaseGPUTransferBuffer(gpuDevice, transferBuffer);
+	SDL_ReleaseGPUBuffer(gpuDevice, particleBuffer);
+}
+
 void GPUNewtonApp::loadDevice()
 {
 	const auto desiredShaderFormats =
@@ -125,30 +210,28 @@ bool GPUNewtonApp::keyPressed(SDL_Keycode key, [[maybe_unused]] bool wait)
 	return keyboard[SDL_GetScancodeFromKey(key, nullptr)];
 }
 
-void GPUNewtonApp::updateCamera(const glm::vec2 &mouse, const Keyboard &keyboard)
+void GPUNewtonApp::updateCameraMouse(float xrel, float yrel)
 {
-	/* Where the camera is looking */
-	{
-		static float yaw;
-		static float pitch;
+	static float yaw;
+	static float pitch;
 
-		yaw += glm::radians(mouse.x * MOUSE_SENSITIVITY);
-		pitch -= glm::radians(mouse.y * MOUSE_SENSITIVITY);
+	yaw += glm::radians(xrel * MOUSE_SENSITIVITY);
+	pitch -= glm::radians(yrel * MOUSE_SENSITIVITY);
 
-		const float rightAngle = glm::pi<float>() / 2;
-		const float topLimit = rightAngle - 0.1;
-		if (pitch > topLimit)
-			pitch = topLimit;
-		else if (pitch < -topLimit)
-			pitch = -topLimit;
+	const float topAngle = glm::pi<float>()/2 - 0.1;
+	if (pitch > topAngle)
+		pitch = topAngle;
+	else if (pitch < -topAngle)
+		pitch = -topAngle;
 
-		const float x = glm::cos(yaw) * glm::cos(pitch);
-		const float y = glm::sin(pitch);
-		const float z = glm::sin(yaw) * glm::cos(pitch);
+	const float x = glm::cos(yaw) * glm::cos(pitch);
+	const float y = glm::sin(pitch);
+	const float z = glm::sin(yaw) * glm::cos(pitch);
+	camLookat = glm::vec3(x, y, z);
+}
 
-		camLookat = glm::vec3(x, y, z);
-	}
-
+void GPUNewtonApp::updateCameraPos(const Keyboard &keyboard)
+{
 	/* Where the camera is */
 	{
 		if (keyPressed(SDLK_W, false))
@@ -159,10 +242,20 @@ void GPUNewtonApp::updateCamera(const glm::vec2 &mouse, const Keyboard &keyboard
 	}
 }
 
-
 void GPUNewtonApp::createCombined(glm::mat4 &combined)
 {
 	glm::mat4 viewMatrix = glm::lookAt(camPosition, camPosition + camLookat, glm::vec3(0.0, 1.0, 0.0));
+	/* Rendering billboards, so we can remove the majority of the viewMatrix :) */
+	viewMatrix[0][0] = 1;
+	viewMatrix[0][1] = 0;
+	viewMatrix[0][2] = 0;
+	viewMatrix[1][0] = 0;
+	viewMatrix[1][1] = 1;
+	viewMatrix[1][2] = 0;
+	viewMatrix[2][0] = 0;
+	viewMatrix[2][1] = 0;
+	viewMatrix[2][2] = 1;
+
 	combined = projMatrix * viewMatrix;
 }
 
@@ -183,7 +276,7 @@ GPUNewtonApp::GPUNewtonApp(std::string_view title, int width, int height)
 	loadPipeline();
 
 	SDL_ShowWindow(window);
-
+	toggleMouseGrab();
 	updateProjMatrix(width, height);
 	keyboard.fill(false);
 }
@@ -217,7 +310,6 @@ void GPUNewtonApp::handleEvents()
 {
 	SDL_Event event;
 
-	mouse = glm::vec2(0, 0);
 	while (SDL_PollEvent(&event)) {
 		switch (event.type) {
 			case SDL_EVENT_QUIT:
@@ -227,8 +319,7 @@ void GPUNewtonApp::handleEvents()
 				updateProjMatrix(event.window.data1, event.window.data2);
 				break;
 			case SDL_EVENT_MOUSE_MOTION:
-				mouse.x = event.motion.xrel;
-				mouse.y = event.motion.yrel;
+				updateCameraMouse(event.motion.xrel, event.motion.yrel);
 				break;
 			case SDL_EVENT_KEY_DOWN:
 				keyboard[event.key.scancode] = true;
@@ -247,6 +338,7 @@ void GPUNewtonApp::loop()
 {
 	running = true;
 
+	ParticleSet particleSet(gpuDevice, NUM_PARTICLES);
 	TimePoint lastTime = currentTime();
 	while (running) {
 		handleEvents();
@@ -257,7 +349,7 @@ void GPUNewtonApp::loop()
 
 		/* Simulation code here */
 		{
-			updateCamera(mouse, keyboard);
+			updateCameraPos(keyboard);
 		}
 		/* End of simulation code */
 
@@ -283,6 +375,10 @@ void GPUNewtonApp::loop()
 			colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
 			colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
 
+			{
+				particleSet.upload(cmdBuffer);
+			}
+
 			SDL_GPURenderPass *renderPass = SDL_BeginGPURenderPass(cmdBuffer, &colorTargetInfo, 1, nullptr);
 			if (!renderPass) {
 				log(SDL_LOG_PRIORITY_ERROR, "failed to acquire render pass: %s", SDL_GetError());
@@ -290,9 +386,13 @@ void GPUNewtonApp::loop()
 			}
 
 			SDL_BindGPUGraphicsPipeline(renderPass, gpuPipeline);
+			SDL_GPUBuffer *particleSetBuffer = particleSet.getBuffer();
+			SDL_BindGPUVertexStorageBuffers(renderPass, 0, &particleSetBuffer, 1);
 
-			SDL_PushGPUVertexUniformData(cmdBuffer, 0, glm::value_ptr(combined), sizeof(glm::mat4));
-			SDL_DrawGPUPrimitives(renderPass, 3, 1, 0, 0);
+			CamInfo camInfo { .combined = combined };
+
+			SDL_PushGPUVertexUniformData(cmdBuffer, 0, &camInfo, sizeof(CamInfo));
+			SDL_DrawGPUPrimitives(renderPass, 3, particleSet.getNum(), 0, 0);
 			SDL_EndGPURenderPass(renderPass);
 		} else {
 			log(SDL_LOG_PRIORITY_INFO, "swapchain skip frame");

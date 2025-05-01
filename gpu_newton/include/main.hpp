@@ -18,8 +18,18 @@
 #include <cstdarg>
 #include <array>
 #include <chrono>
+#include <random>
 
-#define PRINT_FPS (true)
+#define MASS_LOW (1e8)
+#define MASS_HIGH (1e9)
+
+#define PARTICLE_BOX_X (5.0)
+#define PARTICLE_BOX_Y (5.0)
+#define PARTICLE_BOX_Z (5.0)
+
+#define NUM_PARTICLES (10)
+
+#define PRINT_FPS (false)
 
 /*
  * In degrees
@@ -29,7 +39,7 @@
 #define NEAR (0.1f)
 #define FAR (1000.0f)
 
-#define MOUSE_SENSITIVITY (2.0)
+#define MOUSE_SENSITIVITY (0.2)
 
 #define VERT_SHADER_FNAME "shaders/bin/dot_vs.vert"
 #define FRAG_SHADER_FNAME "shaders/bin/dot_fs.frag"
@@ -63,6 +73,32 @@ struct SDLError final : std::exception {
 	}
 };
 
+class ParticleSet {
+	private:
+		struct Particle {
+			glm::vec3 position;
+			float mass;
+			float p0; /* padding */
+			glm::vec3 velocity;
+		};
+
+		SDL_GPUDevice *gpuDevice;
+		std::vector<Particle> particles;
+		SDL_GPUBuffer *particleBuffer = nullptr;
+		SDL_GPUTransferBuffer *transferBuffer = nullptr;
+
+	public:
+		ParticleSet(SDL_GPUDevice *gpuDevice, std::size_t numParticles);
+		void upload(SDL_GPUCommandBuffer *cmdBuffer);
+		SDL_GPUBuffer *getBuffer() const;
+		std::size_t getNum() const;
+		~ParticleSet();
+};
+
+struct CamInfo {
+	glm::mat4 combined;
+};
+
 class GPUNewtonApp {
 	private:
 		SDL_Window *window                   = nullptr;
@@ -72,7 +108,6 @@ class GPUNewtonApp {
 
 		using Keyboard = std::array<bool, SDL_SCANCODE_COUNT>;
 		Keyboard keyboard;
-		glm::vec2 mouse = glm::vec2(0.0);
 
 		glm::mat4 projMatrix = glm::mat4(1.0);
 		glm::vec3 camPosition = glm::vec3(0.0, 0.0, -2);
@@ -100,7 +135,8 @@ class GPUNewtonApp {
 		void toggleMouseGrab();
 		bool keyPressed(SDL_Keycode key, bool wait);
 		void updateProjMatrix(int width, int height);
-		void updateCamera(const glm::vec2 &mouse, const Keyboard &keyboard);
+		void updateCameraMouse(float xrel, float yrel);
+		void updateCameraPos(const Keyboard &keyboard);
 
 		void createCombined(glm::mat4 &combined);
 

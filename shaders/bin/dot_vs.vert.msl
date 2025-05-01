@@ -8,6 +8,19 @@ struct camInfo
     float4x4 combined;
 };
 
+struct Particle
+{
+    packed_float3 position;
+    float mass;
+    float p0;
+    float3 velocity;
+};
+
+struct instanceSSBO
+{
+    Particle particles[1];
+};
+
 struct main0_out
 {
     float2 vertOut [[user(locn0)]];
@@ -15,7 +28,7 @@ struct main0_out
     float4 gl_Position [[position]];
 };
 
-vertex main0_out main0(constant camInfo& _41 [[buffer(0)]], uint gl_VertexIndex [[vertex_id]])
+vertex main0_out main0(constant camInfo& _41 [[buffer(0)]], const device instanceSSBO& _54 [[buffer(1)]], uint gl_VertexIndex [[vertex_id]], uint gl_InstanceIndex [[instance_id]])
 {
     main0_out out = {};
     float2 vert;
@@ -23,23 +36,23 @@ vertex main0_out main0(constant camInfo& _41 [[buffer(0)]], uint gl_VertexIndex 
     {
         case 0:
         {
-            vert = float2(0.0, 0.039999999105930328369140625);
+            vert = float2(0.0, 0.100000001490116119384765625);
             break;
         }
         case 1:
         {
-            vert = float2(0.0346419997513294219970703125, -0.0199999995529651641845703125);
+            vert = float2(0.08660499751567840576171875, -0.0500000007450580596923828125);
             break;
         }
         case 2:
         {
-            vert = float2(-0.0346419997513294219970703125, -0.0199999995529651641845703125);
+            vert = float2(-0.08660499751567840576171875, -0.0500000007450580596923828125);
             break;
         }
     }
-    out.gl_Position = _41.combined * float4(vert, 0.0, 1.0);
+    out.gl_Position = _41.combined * float4(float3(vert, 0.0) + float3(_54.particles[int(gl_InstanceIndex)].position), 1.0);
     out.vertOut = vert;
-    out.vertScale = 50.0;
+    out.vertScale = 20.0;
     return out;
 }
 
