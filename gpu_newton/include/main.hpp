@@ -23,13 +23,13 @@
 #define MASS_LOW (1e8)
 #define MASS_HIGH (1e9)
 
-#define PARTICLE_BOX_X (5.0)
-#define PARTICLE_BOX_Y (5.0)
-#define PARTICLE_BOX_Z (5.0)
+#define PARTICLE_BOX_X (10.0)
+#define PARTICLE_BOX_Y (10.0)
+#define PARTICLE_BOX_Z (10.0)
 
-#define NUM_PARTICLES (10)
+#define NUM_PARTICLES (1e2)
 
-#define PRINT_FPS (false)
+#define PRINT_FPS (true)
 
 /*
  * In degrees
@@ -39,8 +39,10 @@
 #define NEAR (0.1f)
 #define FAR (1000.0f)
 
+#define CAMERA_SPEED (1.0)
 #define MOUSE_SENSITIVITY (0.2)
 
+#define COMP_SHADER_FNAME "shaders/bin/dot_cs.comp"
 #define VERT_SHADER_FNAME "shaders/bin/dot_vs.vert"
 #define FRAG_SHADER_FNAME "shaders/bin/dot_fs.frag"
 
@@ -78,7 +80,6 @@ class ParticleSet {
 		struct Particle {
 			glm::vec3 position;
 			float mass;
-			float p0; /* padding */
 			glm::vec3 velocity;
 		};
 
@@ -88,7 +89,7 @@ class ParticleSet {
 		SDL_GPUTransferBuffer *transferBuffer = nullptr;
 
 	public:
-		ParticleSet(SDL_GPUDevice *gpuDevice, std::size_t numParticles);
+		void init(SDL_GPUDevice *gpuDevice, std::size_t numParticles);
 		void upload(SDL_GPUCommandBuffer *cmdBuffer);
 		SDL_GPUBuffer *getBuffer() const;
 		std::size_t getNum() const;
@@ -104,7 +105,10 @@ class GPUNewtonApp {
 		SDL_Window *window                   = nullptr;
 		SDL_GPUDevice *gpuDevice             = nullptr;
 		SDL_GPUGraphicsPipeline *gpuPipeline = nullptr;
+		SDL_GPUComputePipeline *compPipeline = nullptr;
 		SDL_GPUCommandBuffer *cmdBuffer      = nullptr;
+
+		ParticleSet particleSet;
 
 		using Keyboard = std::array<bool, SDL_SCANCODE_COUNT>;
 		Keyboard keyboard;
@@ -119,6 +123,9 @@ class GPUNewtonApp {
 		bool running = false;
 
 		void loadDevice();
+
+		template <class T>
+		void loadShaderData(std::string &&name, T &shaderData);
 		SDL_GPUShader *loadShader(
 			std::string_view fname,
 			std::uint32_t numSamplers,
@@ -127,6 +134,7 @@ class GPUNewtonApp {
 			std::uint32_t numUniformBuffers
 		);
 		void loadPipeline();
+		void loadComputePipeline();
 
 		TimePoint currentTime();
 		void debugDelta();
@@ -137,6 +145,8 @@ class GPUNewtonApp {
 		void updateProjMatrix(int width, int height);
 		void updateCameraMouse(float xrel, float yrel);
 		void updateCameraPos(const Keyboard &keyboard);
+
+		bool isWindowFocused();
 
 		void createCombined(glm::mat4 &combined);
 

@@ -6,7 +6,6 @@ layout (location = 1) out float vertScale;
 struct Particle {
 	vec3 position;
 	float mass; /* UNUSED */
-	float p0; /* UNUSED */
 	vec3 velocity; /* UNUSED */
 };
 
@@ -21,7 +20,7 @@ layout (binding = 0, std140) uniform camInfo {
 void main()
 {
 	vec2 vert;
-	const float scale = 20;
+	const float scale = 100;
 	switch (gl_VertexIndex) {
 		case 0: vert = vec2(0, 2) / scale; break;
 		case 1: vert = vec2(1.7321, -1) / scale; break;

@@ -1,8 +1,8 @@
 #include <main.hpp>
 
-ParticleSet::ParticleSet(SDL_GPUDevice *gpuDevice, std::size_t numParticles):
-	gpuDevice(gpuDevice)
+void ParticleSet::init(SDL_GPUDevice *gpuDevice, std::size_t numParticles)
 {
+	this->gpuDevice = gpuDevice;
 	std::random_device device;
 	std::mt19937 rng(device());
 
@@ -16,12 +16,12 @@ ParticleSet::ParticleSet(SDL_GPUDevice *gpuDevice, std::size_t numParticles):
 		Particle particle = {
 			.position = glm::vec3(xdisr(rng), ydisr(rng), zdisr(rng)),
 			.mass = mdisr(rng),
-			.p0 = 0,
 			.velocity = glm::vec3(0.0f)
 		};
 
 		particles.push_back(particle);
 	}
+
 
 	const std::size_t bsize = numParticles * sizeof(ParticleSet::Particle);
 	SDL_GPUBufferCreateInfo bufferCreateInfo{};
@@ -46,7 +46,7 @@ ParticleSet::ParticleSet(SDL_GPUDevice *gpuDevice, std::size_t numParticles):
 
 void ParticleSet::upload(SDL_GPUCommandBuffer *cmdBuf)
 {
-	auto particlesGPU = static_cast<ParticleSet::Particle *>(SDL_MapGPUTransferBuffer(gpuDevice, transferBuffer, true));
+	auto particlesGPU = static_cast<ParticleSet::Particle *>(SDL_MapGPUTransferBuffer(gpuDevice, transferBuffer, false));
 	if (!particlesGPU) {
 		log(SDL_LOG_PRIORITY_CRITICAL, "failed to map particle transfer buffer: %s", SDL_GetError());
 		return ;
@@ -65,7 +65,7 @@ void ParticleSet::upload(SDL_GPUCommandBuffer *cmdBuf)
 	region.buffer = particleBuffer;
 	region.size = size * sizeof(ParticleSet::Particle);
 
-	SDL_UploadToGPUBuffer(copyPass, &location, &region, true);
+	SDL_UploadToGPUBuffer(copyPass, &location, &region, false);
 	SDL_EndGPUCopyPass(copyPass);
 }
 
@@ -81,8 +81,11 @@ std::size_t ParticleSet::getNum() const
 
 ParticleSet::~ParticleSet()
 {
-	SDL_ReleaseGPUTransferBuffer(gpuDevice, transferBuffer);
-	SDL_ReleaseGPUBuffer(gpuDevice, particleBuffer);
+	if (transferBuffer)
+		SDL_ReleaseGPUTransferBuffer(gpuDevice, transferBuffer);
+
+	if (particleBuffer)
+		SDL_ReleaseGPUBuffer(gpuDevice, particleBuffer);
 }
 
 void GPUNewtonApp::loadDevice()
@@ -109,21 +112,10 @@ void GPUNewtonApp::loadDevice()
 		throw SDLError("unable to set GPU device window");
 }
 
-SDL_GPUShader *GPUNewtonApp::loadShader(
-	std::string_view fname,
-	std::uint32_t numSamplers,
-	std::uint32_t numStorageTextures,
-	std::uint32_t numStorageBuffers,
-	std::uint32_t numUniformBuffers)
+template <class T>
+void GPUNewtonApp::loadShaderData(std::string &&name, T &shaderData)
 {
-	std::string fileName(fname);
-	SDL_GPUShaderStage stage;
-	if (SDL_strstr(fileName.data(), ".vert"))
-		stage = SDL_GPU_SHADERSTAGE_VERTEX;
-	else if (SDL_strstr(fileName.data(), ".frag"))
-		stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
-	else
-		throw std::runtime_error("invalid shader file extension (vert/frag)");
+	std::string fileName(name);
 
 	SDL_GPUShaderFormat fmt = SDL_GetGPUShaderFormats(gpuDevice);
 	const char *entryPoint = "main";
@@ -142,11 +134,30 @@ SDL_GPUShader *GPUNewtonApp::loadShader(
 	if (!data)
 		throw SDLError("failed to read shader file");
 
+	shaderData.code_size = codeSize;
+	shaderData.code = static_cast<const std::uint8_t *>(data);
+	shaderData.entrypoint = entryPoint;
+	shaderData.format = fmt;
+}
+
+SDL_GPUShader *GPUNewtonApp::loadShader(
+	std::string_view fname,
+	std::uint32_t numSamplers,
+	std::uint32_t numStorageTextures,
+	std::uint32_t numStorageBuffers,
+	std::uint32_t numUniformBuffers)
+{
+	std::string fileName(fname);
+	SDL_GPUShaderStage stage;
+	if (SDL_strstr(fileName.data(), ".vert"))
+		stage = SDL_GPU_SHADERSTAGE_VERTEX;
+	else if (SDL_strstr(fileName.data(), ".frag"))
+		stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
+	else
+		throw std::runtime_error("invalid shader file extension (vert/frag)");
+
 	SDL_GPUShaderCreateInfo createInfo{};
-	createInfo.code_size = codeSize;
-	createInfo.code = static_cast<const std::uint8_t *>(data);
-	createInfo.entrypoint = entryPoint;
-	createInfo.format = fmt;
+	loadShaderData(std::move(fileName), createInfo);
 	createInfo.stage = stage;
 	createInfo.num_samplers = numSamplers;
 	createInfo.num_storage_textures = numStorageTextures;
@@ -155,16 +166,16 @@ SDL_GPUShader *GPUNewtonApp::loadShader(
 	createInfo.props = 0;
 
 	SDL_GPUShader *shader = SDL_CreateGPUShader(gpuDevice, &createInfo);
+	SDL_free((void *) createInfo.code);
 	if (!shader)
 		throw SDLError("failed to create shader");
 
-	SDL_free(data);
 	return shader;
 }
 
 void GPUNewtonApp::loadPipeline()
 {
-	SDL_GPUShader *vertShader = loadShader(VERT_SHADER_FNAME, 0, 0, 0, 1);
+	SDL_GPUShader *vertShader = loadShader(VERT_SHADER_FNAME, 0, 0, 1, 1);
 	SDL_GPUShader *fragShader = loadShader(FRAG_SHADER_FNAME, 0, 0, 0, 0);
 
 	SDL_GPUColorTargetDescription colorDesc{};
@@ -195,6 +206,39 @@ void GPUNewtonApp::loadPipeline()
 	SDL_ReleaseGPUShader(gpuDevice, fragShader);
 	if (!gpuPipeline)
 		throw SDLError("failed to load graphics pipeline");
+}
+
+void GPUNewtonApp::loadComputePipeline()
+{
+	const std::size_t numParticles = particleSet.getNum();
+
+	const auto numSamplers   = 0;
+	const auto numROTextures = 0;
+	const auto numROBuffers  = 0;
+	const auto numRWTextures = 0;
+	const auto numRWBuffers  = 1;
+	const auto numUniforms   = 0;
+
+	const auto threadCountX  = 1;
+	const auto threadCountY  = 1;
+	const auto threadCountZ  = numParticles;
+
+	SDL_GPUComputePipelineCreateInfo createInfo{};
+	loadShaderData(std::string(COMP_SHADER_FNAME), createInfo);
+	createInfo.num_samplers = numSamplers;
+	createInfo.num_readonly_storage_textures = numROTextures;
+	createInfo.num_readonly_storage_buffers = numROBuffers;
+	createInfo.num_readwrite_storage_textures = numRWTextures;
+	createInfo.num_readwrite_storage_buffers = numRWBuffers;
+	createInfo.num_uniform_buffers = numUniforms;
+	createInfo.threadcount_x = threadCountX;
+	createInfo.threadcount_y = threadCountY;
+	createInfo.threadcount_z = threadCountZ;
+
+	compPipeline = SDL_CreateGPUComputePipeline(gpuDevice, &createInfo);
+	SDL_free((void *) createInfo.code);
+	if (!compPipeline)
+		throw SDLError("failed to load compute pipeline");
 }
 
 void GPUNewtonApp::updateProjMatrix(int width, int height)
@@ -234,18 +278,22 @@ void GPUNewtonApp::updateCameraPos(const Keyboard &keyboard)
 {
 	/* Where the camera is */
 	{
+		const float multiplier =
+			static_cast<float>(delta / std::chrono::seconds(1)) *
+			CAMERA_SPEED;
+
 		if (keyPressed(SDLK_W, false))
-			camPosition += camLookat * static_cast<float>(delta / std::chrono::seconds(1));
+			camPosition += camLookat * multiplier;
 
 		if (keyPressed(SDLK_S, false))
-			camPosition -= camLookat * static_cast<float>(delta / std::chrono::seconds(1));
+			camPosition -= camLookat * multiplier;
 	}
 }
 
 void GPUNewtonApp::createCombined(glm::mat4 &combined)
 {
 	glm::mat4 viewMatrix = glm::lookAt(camPosition, camPosition + camLookat, glm::vec3(0.0, 1.0, 0.0));
-	/* Rendering billboards, so we can remove the majority of the viewMatrix :) */
+	/* Rendering billboards, so we can remove the majority of the viewMatrix :)
 	viewMatrix[0][0] = 1;
 	viewMatrix[0][1] = 0;
 	viewMatrix[0][2] = 0;
@@ -255,6 +303,7 @@ void GPUNewtonApp::createCombined(glm::mat4 &combined)
 	viewMatrix[2][0] = 0;
 	viewMatrix[2][1] = 0;
 	viewMatrix[2][2] = 1;
+	*/
 
 	combined = projMatrix * viewMatrix;
 }
@@ -274,6 +323,8 @@ GPUNewtonApp::GPUNewtonApp(std::string_view title, int width, int height)
 	log(SDL_LOG_PRIORITY_INFO, "loading GPU device and pipeline...");
 	loadDevice();
 	loadPipeline();
+	particleSet.init(gpuDevice, NUM_PARTICLES);
+	loadComputePipeline();
 
 	SDL_ShowWindow(window);
 	toggleMouseGrab();
@@ -304,6 +355,12 @@ void GPUNewtonApp::toggleMouseGrab()
 	static bool enabled;
 	enabled = !enabled;
 	SDL_SetWindowRelativeMouseMode(window, enabled);
+}
+
+bool GPUNewtonApp::isWindowFocused()
+{
+	const SDL_WindowFlags flags = SDL_GetWindowFlags(window);
+	return !!(flags & SDL_WINDOW_INPUT_FOCUS);
 }
 
 void GPUNewtonApp::handleEvents()
@@ -338,10 +395,18 @@ void GPUNewtonApp::loop()
 {
 	running = true;
 
-	ParticleSet particleSet(gpuDevice, NUM_PARTICLES);
+	SDL_GPUBuffer * const particleSetBuffer = particleSet.getBuffer();
+	const auto particleSetNum = particleSet.getNum();
+
 	TimePoint lastTime = currentTime();
 	while (running) {
 		handleEvents();
+
+		cmdBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
+		if (!cmdBuffer) {
+			log(SDL_LOG_PRIORITY_ERROR, "failed to acquire command buffer: %s", SDL_GetError());
+			continue;
+		}
 
 		TimePoint thisTime = currentTime();
 		delta = thisTime - lastTime;
@@ -350,22 +415,29 @@ void GPUNewtonApp::loop()
 		/* Simulation code here */
 		{
 			updateCameraPos(keyboard);
+
+			SDL_GPUStorageBufferReadWriteBinding bufferBinding{};
+			bufferBinding.buffer = particleSet.getBuffer();
+			bufferBinding.cycle = false;
+			SDL_GPUComputePass *computePass = SDL_BeginGPUComputePass(cmdBuffer, nullptr, 0, &bufferBinding, 1);
+			if (!computePass) {
+				log(SDL_LOG_PRIORITY_ERROR, "failed to acquire compute pass: %s", SDL_GetError());
+				continue;
+			}
+			SDL_BindGPUComputePipeline(computePass, compPipeline);
+			SDL_BindGPUComputeStorageBuffers(computePass, 0, &particleSetBuffer, 1);
+			SDL_DispatchGPUCompute(computePass, 1, 1, particleSetNum);
+			SDL_EndGPUComputePass(computePass);
 		}
 		/* End of simulation code */
 
 		lastTime = thisTime;
 
-		cmdBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
-		if (!cmdBuffer) {
-			log(SDL_LOG_PRIORITY_ERROR, "failed to acquire command buffer: %s", SDL_GetError());
-			continue;
-		}
-
 		SDL_GPUTexture *swapTexture;
 		if (!SDL_WaitAndAcquireGPUSwapchainTexture(cmdBuffer, window, &swapTexture, nullptr, nullptr))
 			continue;
 
-		if (swapTexture) {
+		if (swapTexture && isWindowFocused()) {
 			glm::mat4 combined;
 			createCombined(combined);
 
@@ -386,16 +458,13 @@ void GPUNewtonApp::loop()
 			}
 
 			SDL_BindGPUGraphicsPipeline(renderPass, gpuPipeline);
-			SDL_GPUBuffer *particleSetBuffer = particleSet.getBuffer();
 			SDL_BindGPUVertexStorageBuffers(renderPass, 0, &particleSetBuffer, 1);
 
 			CamInfo camInfo { .combined = combined };
 
 			SDL_PushGPUVertexUniformData(cmdBuffer, 0, &camInfo, sizeof(CamInfo));
-			SDL_DrawGPUPrimitives(renderPass, 3, particleSet.getNum(), 0, 0);
+			SDL_DrawGPUPrimitives(renderPass, 3, particleSetNum, 0, 0);
 			SDL_EndGPURenderPass(renderPass);
-		} else {
-			log(SDL_LOG_PRIORITY_INFO, "swapchain skip frame");
 		}
 
 		SDL_SubmitGPUCommandBuffer(cmdBuffer);

@@ -1,0 +1,38 @@
+#version 450
+
+struct Particle {
+	vec3 position;
+	float mass;
+	vec3 velocity;
+};
+
+layout (binding = 0, std140) buffer instanceSSBO {
+	Particle particles[];
+};
+
+void main()
+{
+	const uint numParticles = gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_WorkGroupSize.z;
+	const uint idx = gl_LocalInvocationIndex;
+
+	vec3 accelVector = vec3(0, 0, 0);
+	for (uint i = 0; i < numParticles; i++) {
+		if (idx == i)
+			continue;
+
+		const vec3 dVector = particles[i].position - particles[idx].position;
+		const float gConstant = 6.6743e-11;
+		float dMagn = dot(dVector, dVector);
+		if (dMagn == 0.0)
+			dMagn = 1.0;
+
+		const float aScalar = particles[i].mass * gConstant / dMagn;
+		accelVector += vec3(dVector * aScalar / sqrt(dMagn));
+	}
+
+	particles[idx].velocity += accelVector;
+
+	/* TODO: delta */
+	vec3 finalVector = particles[idx].velocity * (1.0);
+	particles[idx].position += finalVector;
+}
