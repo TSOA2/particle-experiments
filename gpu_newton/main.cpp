@@ -15,13 +15,14 @@ void ParticleSet::init(SDL_GPUDevice *gpuDevice, std::size_t numParticles)
 	for (std::size_t i = 0; i < numParticles; i++) {
 		Particle particle = {
 			.position = glm::vec3(xdisr(rng), ydisr(rng), zdisr(rng)),
-			.mass = mdisr(rng),
+			.mass = 1000,
 			.velocity = glm::vec3(0.0f)
 		};
 
+		std::cout << particle.position << '\n';
+
 		particles.push_back(particle);
 	}
-
 
 	const std::size_t bsize = numParticles * sizeof(ParticleSet::Particle);
 	SDL_GPUBufferCreateInfo bufferCreateInfo{};
@@ -44,8 +45,14 @@ void ParticleSet::init(SDL_GPUDevice *gpuDevice, std::size_t numParticles)
 		throw SDLError("failed to create particle transfer buffer");
 }
 
-void ParticleSet::upload(SDL_GPUCommandBuffer *cmdBuf)
+void ParticleSet::upload()
 {
+	SDL_GPUCommandBuffer *cmdBuf = SDL_AcquireGPUCommandBuffer(gpuDevice);
+	if (!cmdBuf) {
+		log(SDL_LOG_PRIORITY_CRITICAL, "failed to acquire command buffer to upload particles: %s", SDL_GetError());
+		return ;
+	}
+
 	auto particlesGPU = static_cast<ParticleSet::Particle *>(SDL_MapGPUTransferBuffer(gpuDevice, transferBuffer, false));
 	if (!particlesGPU) {
 		log(SDL_LOG_PRIORITY_CRITICAL, "failed to map particle transfer buffer: %s", SDL_GetError());
@@ -67,6 +74,8 @@ void ParticleSet::upload(SDL_GPUCommandBuffer *cmdBuf)
 
 	SDL_UploadToGPUBuffer(copyPass, &location, &region, false);
 	SDL_EndGPUCopyPass(copyPass);
+
+	SDL_SubmitGPUCommandBuffer(cmdBuf);
 }
 
 SDL_GPUBuffer *ParticleSet::getBuffer() const
@@ -79,7 +88,7 @@ std::size_t ParticleSet::getNum() const
 	return particles.size();
 }
 
-ParticleSet::~ParticleSet()
+void ParticleSet::deinit()
 {
 	if (transferBuffer)
 		SDL_ReleaseGPUTransferBuffer(gpuDevice, transferBuffer);
@@ -394,13 +403,14 @@ void GPUNewtonApp::handleEvents()
 void GPUNewtonApp::loop()
 {
 	running = true;
-
-	SDL_GPUBuffer * const particleSetBuffer = particleSet.getBuffer();
-	const auto particleSetNum = particleSet.getNum();
-
 	TimePoint lastTime = currentTime();
+
+	particleSet.upload();
 	while (running) {
 		handleEvents();
+
+		SDL_GPUBuffer * const particleSetBuffer = particleSet.getBuffer();
+		const auto particleSetNum = particleSet.getNum();
 
 		cmdBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
 		if (!cmdBuffer) {
@@ -447,10 +457,6 @@ void GPUNewtonApp::loop()
 			colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
 			colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
 
-			{
-				particleSet.upload(cmdBuffer);
-			}
-
 			SDL_GPURenderPass *renderPass = SDL_BeginGPURenderPass(cmdBuffer, &colorTargetInfo, 1, nullptr);
 			if (!renderPass) {
 				log(SDL_LOG_PRIORITY_ERROR, "failed to acquire render pass: %s", SDL_GetError());
@@ -473,6 +479,8 @@ void GPUNewtonApp::loop()
 
 GPUNewtonApp::~GPUNewtonApp()
 {
+	particleSet.deinit();
+
 	if (gpuPipeline)
 		SDL_ReleaseGPUGraphicsPipeline(gpuDevice, gpuPipeline);
 

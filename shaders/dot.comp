@@ -12,9 +12,8 @@ layout (binding = 0, std140) buffer instanceSSBO {
 
 void main()
 {
-	const uint numParticles = gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_WorkGroupSize.z;
 	const uint idx = gl_LocalInvocationIndex;
-
+	const uint numParticles = gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_WorkGroupSize.z + 1;
 	vec3 accelVector = vec3(0, 0, 0);
 	for (uint i = 0; i < numParticles; i++) {
 		if (idx == i)
@@ -32,7 +31,6 @@ void main()
 
 	particles[idx].velocity += accelVector;
 
-	/* TODO: delta */
 	vec3 finalVector = particles[idx].velocity * (1.0);
 	particles[idx].position += finalVector;
 }

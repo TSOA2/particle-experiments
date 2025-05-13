@@ -35,23 +35,23 @@ vertex main0_out main0(constant camInfo& _41 [[buffer(0)]], const device instanc
     {
         case 0:
         {
-            vert = float2(0.0, 0.0199999995529651641845703125);
+            vert = float2(0.0, 0.100000001490116119384765625);
             break;
         }
         case 1:
         {
-            vert = float2(0.01732099987566471099853515625, -0.00999999977648258209228515625);
+            vert = float2(0.08660499751567840576171875, -0.0500000007450580596923828125);
             break;
         }
         case 2:
         {
-            vert = float2(-0.01732099987566471099853515625, -0.00999999977648258209228515625);
+            vert = float2(-0.08660499751567840576171875, -0.0500000007450580596923828125);
             break;
         }
     }
     out.gl_Position = _41.combined * float4(float3(vert, 0.0) + float3(_54.particles[int(gl_InstanceIndex)].position), 1.0);
     out.vertOut = vert;
-    out.vertScale = 100.0;
+    out.vertScale = 20.0;
     return out;
 }
 

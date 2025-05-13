@@ -19,7 +19,7 @@ kernel void main0(device instanceSSBO& _40 [[buffer(0)]], uint gl_LocalInvocatio
 {
     uint idx = gl_LocalInvocationIndex;
     float3 accelVector = float3(0.0);
-    for (uint i = 0u; i < 1u; i++)
+    for (uint i = 0u; i < 2u; i++)
     {
         if (idx == i)
         {

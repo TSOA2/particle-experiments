@@ -20,12 +20,12 @@
 #include <chrono>
 #include <random>
 
-#define MASS_LOW (1e8)
-#define MASS_HIGH (1e9)
+#define MASS_LOW (1e2)
+#define MASS_HIGH (1e4)
 
-#define PARTICLE_BOX_X (10.0)
-#define PARTICLE_BOX_Y (10.0)
-#define PARTICLE_BOX_Z (10.0)
+#define PARTICLE_BOX_X (1.0)
+#define PARTICLE_BOX_Y (1.0)
+#define PARTICLE_BOX_Z (1.0)
 
 #define NUM_PARTICLES (1e2)
 
@@ -77,9 +77,10 @@ struct SDLError final : std::exception {
 
 class ParticleSet {
 	private:
-		struct Particle {
+		struct __attribute__((packed)) Particle {
 			glm::vec3 position;
 			float mass;
+			float padding;
 			glm::vec3 velocity;
 		};
 
@@ -90,10 +91,10 @@ class ParticleSet {
 
 	public:
 		void init(SDL_GPUDevice *gpuDevice, std::size_t numParticles);
-		void upload(SDL_GPUCommandBuffer *cmdBuffer);
+		void upload();
 		SDL_GPUBuffer *getBuffer() const;
 		std::size_t getNum() const;
-		~ParticleSet();
+		void deinit();
 };
 
 struct CamInfo {
