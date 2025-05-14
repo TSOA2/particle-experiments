@@ -15,27 +15,31 @@ struct instanceSSBO
     Particle particles[1];
 };
 
-kernel void main0(device instanceSSBO& _40 [[buffer(0)]], uint gl_LocalInvocationIndex [[thread_index_in_threadgroup]])
+constant uint3 gl_WorkGroupSize [[maybe_unused]] = uint3(1000u, 1u, 1u);
+
+kernel void main0(device instanceSSBO& _74 [[buffer(0)]], uint3 gl_WorkGroupID [[threadgroup_position_in_grid]], uint3 gl_NumWorkGroups [[threadgroups_per_grid]], uint gl_LocalInvocationIndex [[thread_index_in_threadgroup]])
 {
-    uint idx = gl_LocalInvocationIndex;
-    float3 accelVector = float3(0.0);
-    for (uint i = 0u; i < 2u; i++)
+    uint gidx = (((gl_WorkGroupID.x + 1u) * (gl_WorkGroupID.y + 1u)) * (gl_WorkGroupID.z + 1u)) - 1u;
+    uint numParticles = (gl_NumWorkGroups.x * gl_NumWorkGroups.y) * gl_NumWorkGroups.z;
+    uint div = numParticles / 1000u;
+    uint _46 = gl_LocalInvocationIndex * div;
+    uint limit = _46 + div;
+    for (uint i = _46; i < limit; i++)
     {
-        if (idx == i)
+        if (gidx == i)
         {
             continue;
         }
-        float3 dVector = float3(_40.particles[i].position) - float3(_40.particles[idx].position);
+        float3 dVector = float3(_74.particles[i].position) - float3(_74.particles[gidx].position);
         float dMagn = dot(dVector, dVector);
         if (dMagn == 0.0)
         {
-            dMagn = 1.0;
+            dMagn = 0.001000000047497451305389404296875;
         }
-        float aScalar = (_40.particles[i].mass * 6.6743000015634379451512359082699e-11) / dMagn;
-        accelVector += float3((dVector * aScalar) / float3(sqrt(dMagn)));
+        float aScalar = (_74.particles[i].mass * 6.6743000015634379451512359082699e-11) / dMagn;
+        _74.particles[gidx].velocity += float3((dVector * aScalar) / float3(sqrt(dMagn)));
     }
-    _40.particles[idx].velocity += accelVector;
-    float3 finalVector = _40.particles[idx].velocity * 1.0;
-    _40.particles[idx].position = float3(_40.particles[idx].position) + finalVector;
+    float3 finalVector = _74.particles[gidx].velocity * 1.0;
+    _74.particles[gidx].position = float3(_74.particles[gidx].position) + finalVector;
 }
 

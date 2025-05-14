@@ -21,13 +21,13 @@
 #include <random>
 
 #define MASS_LOW (1e2)
-#define MASS_HIGH (1e4)
+#define MASS_HIGH (1e9)
 
-#define PARTICLE_BOX_X (1.0)
-#define PARTICLE_BOX_Y (1.0)
-#define PARTICLE_BOX_Z (1.0)
+#define PARTICLE_BOX_X (1)
+#define PARTICLE_BOX_Y (1)
+#define PARTICLE_BOX_Z (1)
 
-#define NUM_PARTICLES (1e2)
+#define NPARTICLES (1e3)
 
 #define PRINT_FPS (true)
 
@@ -39,7 +39,7 @@
 #define NEAR (0.1f)
 #define FAR (1000.0f)
 
-#define CAMERA_SPEED (1.0)
+#define CAMERA_SPEED (10.0)
 #define MOUSE_SENSITIVITY (0.2)
 
 #define COMP_SHADER_FNAME "shaders/bin/dot_cs.comp"
@@ -78,10 +78,10 @@ struct SDLError final : std::exception {
 class ParticleSet {
 	private:
 		struct __attribute__((packed)) Particle {
-			glm::vec3 position;
+			float x, y, z;
 			float mass;
 			float padding;
-			glm::vec3 velocity;
+			float vx, vy, vz;
 		};
 
 		SDL_GPUDevice *gpuDevice;
@@ -90,7 +90,7 @@ class ParticleSet {
 		SDL_GPUTransferBuffer *transferBuffer = nullptr;
 
 	public:
-		void init(SDL_GPUDevice *gpuDevice, std::size_t numParticles);
+		void init(SDL_GPUDevice *gpuDevice);
 		void upload();
 		SDL_GPUBuffer *getBuffer() const;
 		std::size_t getNum() const;
@@ -124,7 +124,6 @@ class GPUNewtonApp {
 		bool running = false;
 
 		void loadDevice();
-
 		template <class T>
 		void loadShaderData(std::string &&name, T &shaderData);
 		SDL_GPUShader *loadShader(

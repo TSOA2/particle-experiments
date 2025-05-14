@@ -10,27 +10,29 @@ layout (binding = 0, std140) buffer instanceSSBO {
 	Particle particles[];
 };
 
+layout (local_size_x = 1000, local_size_y = 1, local_size_z = 1) in;
 void main()
 {
-	const uint idx = gl_LocalInvocationIndex;
-	const uint numParticles = gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_WorkGroupSize.z + 1;
-	vec3 accelVector = vec3(0, 0, 0);
-	for (uint i = 0; i < numParticles; i++) {
-		if (idx == i)
+	const uint gidx = (gl_WorkGroupID.x+1) * (gl_WorkGroupID.y+1) * (gl_WorkGroupID.z+1) -1;
+	const uint numParticles = gl_NumWorkGroups.x * gl_NumWorkGroups.y * gl_NumWorkGroups.z;
+	const uint div = numParticles / 1000;
+	uint i = gl_LocalInvocationIndex * div;
+
+	const uint limit = i + div;
+	for (; i < limit; i++) {
+		if (gidx == i)
 			continue;
 
-		const vec3 dVector = particles[i].position - particles[idx].position;
+		const vec3 dVector = particles[i].position - particles[gidx].position;
 		const float gConstant = 6.6743e-11;
 		float dMagn = dot(dVector, dVector);
 		if (dMagn == 0.0)
-			dMagn = 1.0;
+			dMagn = 0.001;
 
 		const float aScalar = particles[i].mass * gConstant / dMagn;
-		accelVector += vec3(dVector * aScalar / sqrt(dMagn));
+		particles[gidx].velocity += vec3(dVector * aScalar / sqrt(dMagn));
 	}
 
-	particles[idx].velocity += accelVector;
-
-	vec3 finalVector = particles[idx].velocity * (1.0);
-	particles[idx].position += finalVector;
+	vec3 finalVector = particles[gidx].velocity * (1.0);
+	particles[gidx].position += finalVector;
 }

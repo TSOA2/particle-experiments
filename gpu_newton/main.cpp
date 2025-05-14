@@ -1,7 +1,9 @@
 #include <main.hpp>
 
-void ParticleSet::init(SDL_GPUDevice *gpuDevice, std::size_t numParticles)
+void ParticleSet::init(SDL_GPUDevice *gpuDevice)
 {
+	std::size_t numParticles = NPARTICLES;
+
 	this->gpuDevice = gpuDevice;
 	std::random_device device;
 	std::mt19937 rng(device());
@@ -14,12 +16,14 @@ void ParticleSet::init(SDL_GPUDevice *gpuDevice, std::size_t numParticles)
 	particles.reserve(numParticles);
 	for (std::size_t i = 0; i < numParticles; i++) {
 		Particle particle = {
-			.position = glm::vec3(xdisr(rng), ydisr(rng), zdisr(rng)),
+			.x = xdisr(rng),
+			.y = ydisr(rng),
+			.z = zdisr(rng),
 			.mass = 1000,
-			.velocity = glm::vec3(0.0f)
+			.vx = 0,
+			.vy = 0,
+			.vz = 0
 		};
-
-		std::cout << particle.position << '\n';
 
 		particles.push_back(particle);
 	}
@@ -219,18 +223,12 @@ void GPUNewtonApp::loadPipeline()
 
 void GPUNewtonApp::loadComputePipeline()
 {
-	const std::size_t numParticles = particleSet.getNum();
-
 	const auto numSamplers   = 0;
 	const auto numROTextures = 0;
 	const auto numROBuffers  = 0;
 	const auto numRWTextures = 0;
 	const auto numRWBuffers  = 1;
 	const auto numUniforms   = 0;
-
-	const auto threadCountX  = 1;
-	const auto threadCountY  = 1;
-	const auto threadCountZ  = numParticles;
 
 	SDL_GPUComputePipelineCreateInfo createInfo{};
 	loadShaderData(std::string(COMP_SHADER_FNAME), createInfo);
@@ -240,9 +238,9 @@ void GPUNewtonApp::loadComputePipeline()
 	createInfo.num_readwrite_storage_textures = numRWTextures;
 	createInfo.num_readwrite_storage_buffers = numRWBuffers;
 	createInfo.num_uniform_buffers = numUniforms;
-	createInfo.threadcount_x = threadCountX;
-	createInfo.threadcount_y = threadCountY;
-	createInfo.threadcount_z = threadCountZ;
+	createInfo.threadcount_x = 1000;
+	createInfo.threadcount_y = 1;
+	createInfo.threadcount_z = 1;
 
 	compPipeline = SDL_CreateGPUComputePipeline(gpuDevice, &createInfo);
 	SDL_free((void *) createInfo.code);
@@ -332,7 +330,7 @@ GPUNewtonApp::GPUNewtonApp(std::string_view title, int width, int height)
 	log(SDL_LOG_PRIORITY_INFO, "loading GPU device and pipeline...");
 	loadDevice();
 	loadPipeline();
-	particleSet.init(gpuDevice, NUM_PARTICLES);
+	particleSet.init(gpuDevice);
 	loadComputePipeline();
 
 	SDL_ShowWindow(window);
@@ -436,7 +434,7 @@ void GPUNewtonApp::loop()
 			}
 			SDL_BindGPUComputePipeline(computePass, compPipeline);
 			SDL_BindGPUComputeStorageBuffers(computePass, 0, &particleSetBuffer, 1);
-			SDL_DispatchGPUCompute(computePass, 1, 1, particleSetNum);
+			SDL_DispatchGPUCompute(computePass, 1, 1, NPARTICLES);
 			SDL_EndGPUComputePass(computePass);
 		}
 		/* End of simulation code */
